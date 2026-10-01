@@ -32,5 +32,16 @@ const msgs=Object.entries(session?.messages||{}).filter(([,m])=>m.sessionId===se
 async function sendMessage(e){e.preventDefault();if(!active())return;const input=document.getElementById('message'),text=input.value.trim();if(!text||text.length>300)return;input.value='';try{await set(push(ref(db,'session/messages')),{sender:role,sessionId:session.id,text,at:serverTimestamp()})}catch(err){input.value=text;fail(err)}}
 async function drawQuestion(){if(!active())return;document.getElementById('question').disabled=true;try{const id=session.id;await runTransaction(ref(db,'session/questions'),q=>{if(!q||q.sessionId!==id)q={sessionId:id,used:{},current:null};const available=questions.map((_,i)=>i).filter(i=>!q.used[i]);if(!available.length)return;const pick=available[Math.floor(Math.random()*available.length)];q.used[pick]=true;q.current=pick;q.at=Date.now()+offset;return q},{applyLocally:false});}catch(err){fail(err)}finally{render()}}
 async function start(){if(!connected||session?.status!=='WAITING')return;try{const p=(await get(ref(db,'presence'))).val()||{};if(!['A','B'].every(r=>p[r]?.online&&p[r]?.sessionId===session.id))throw Error('A와 B의 접속을 확인해주세요.');const t=now();await runTransaction(S,s=>{if(!s||s.id!==session.id||s.status!=='WAITING')return;s.status='RUNNING';s.startedAt=t;s.endsAt=t+600000;return s},{applyLocally:false})}catch(err){fail(err)}}
-async function finish(){if(!confirm('지금 대화를 종료할까요?'))return;try{await runTransaction(S,s=>{if(!s||s.status!=='RUNNING')return;s.status='FINISHED';s.endsAt=now();return s},{applyLocally:false})}catch(err){fail(err)}}
+async function finish() {
+  if (role !== 'admin' || !connected ||
+      session?.status !== 'RUNNING') return;
+
+  if (!confirm('지금 대화를 종료할까요?')) return;
+
+  try {
+    await set(ref(db, 'session/status'), 'FINISHED');
+  } catch (err) {
+    fail(err);
+  }
+}
 async function reset(){if(!confirm('현재 커플의 채팅과 질문을 모두 삭제하고 다음 커플을 준비할까요?'))return;try{const next=(session?.id||0)+1;await set(S,{id:next,status:'WAITING',createdAt:serverTimestamp()});await remove(ref(db,'presence'));markedId=null}catch(err){fail(err)}}
